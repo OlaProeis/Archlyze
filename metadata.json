@@ -1,0 +1,5 @@
+{
+  "name": "Archlyze",
+  "description": "A comprehensive multi-language code analysis tool using Gemini 3 to map dependencies, detect anti-patterns, and visualize architecture.",
+  "requestFramePermissions": []
+}
