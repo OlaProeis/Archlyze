@@ -5,7 +5,7 @@
 
 Designed for multiple languages (Rust, Python, JavaScript/TypeScript, Go, Java, C++), it runs entirely in the browser (SPA).
 
-![Archlyze](assets/archlyze.png)
+![Archlyze](assets/Archlyze.png)
 
 ## 🚀 Key Features
 
