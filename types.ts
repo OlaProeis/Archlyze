@@ -78,6 +78,8 @@ export interface AppState {
   showHistory: boolean; // New toggle for history panel
   settings: AppSettings;
   sidebarWidth: number; // Percentage
+  rightTopHeight: number; // Percentage of right column height (analysis pane)
+  isVisualCollapsed: boolean;
   modalContent: {
     isOpen: boolean;
     title: string;

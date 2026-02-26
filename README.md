@@ -5,6 +5,8 @@
 
 Designed for multiple languages (Rust, Python, JavaScript/TypeScript, Go, Java, C++), it runs entirely in the browser (SPA).
 
+**Live demo:** [https://archlyze.vercel.app/](https://archlyze.vercel.app/)
+
 ![Archlyze](assets/archlyze.png)
 
 ## 🚀 Key Features

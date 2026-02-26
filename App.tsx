@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Play, Moon, Sun, Share2, FileCode, AlertTriangle, Edit2, Check, Settings, GripVertical, FolderOpen, PanelLeft, History, X, Clock, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Upload, Play, Moon, Sun, Share2, FileCode, AlertTriangle, Edit2, Check, Settings, GripVertical, FolderOpen, PanelLeft, History, X, Clock, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { AppState, AnalysisStatus, DiagramType, AppSettings, CodeIssue, CodeComponent, ProjectFile } from './types';
 import { EXAMPLE_RUST_CLI, EXAMPLE_PYTHON_DATA, EXAMPLE_JS_EXPRESS } from './constants';
 import { analyzeRustCode, generateArchitectureDiagram, generateFix, generateUnitTests } from './utils/gemini';
@@ -23,6 +23,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   model: 'gemini-2.5-flash',
   maxLines: 10000,
 };
+
+const MIN_LEFT_WIDTH = 20;
+const MAX_LEFT_WIDTH = 80;
+const MIN_RIGHT_TOP = 20;
+const MAX_RIGHT_TOP = 80;
+const VISUAL_COLLAPSED_HEIGHT = 56;
 
 // Helper to read file content as promise
 const readFileContent = (file: File): Promise<string> => {
@@ -48,6 +54,8 @@ export default function App() {
     showHistory: false,
     settings: DEFAULT_SETTINGS,
     sidebarWidth: 50,
+    rightTopHeight: 60,
+    isVisualCollapsed: true,
     modalContent: {
       isOpen: false,
       title: '',
@@ -69,8 +77,9 @@ export default function App() {
     }
   }, [state.files.length]);
 
-  const [isResizing, setIsResizing] = useState(false);
+  const [dragMode, setDragMode] = useState<'left' | 'right' | 'center' | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
+  const mainLayoutRef = useRef<HTMLElement | null>(null);
   
   // Folder Upload State
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
@@ -115,17 +124,44 @@ export default function App() {
     });
   }, []);
 
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
   // Resizing Logic
-  const startResizing = useCallback(() => setIsResizing(true), []);
-  const stopResizing = useCallback(() => setIsResizing(false), []);
+  const startLeftResizing = useCallback(() => setDragMode('left'), []);
+  const startRightResizing = useCallback(() => setDragMode('right'), []);
+  const startCenterResizing = useCallback(() => {
+    setState(s => ({
+      ...s,
+      isVisualCollapsed: false,
+      rightTopHeight: s.isVisualCollapsed ? 60 : s.rightTopHeight
+    }));
+    setDragMode('center');
+  }, []);
+  const stopResizing = useCallback(() => setDragMode(null), []);
+
   const resize = useCallback((e: MouseEvent) => {
-    if (isResizing) {
-      const newWidth = (e.clientX / window.innerWidth) * 100;
-      if (newWidth > 20 && newWidth < 80) {
-        setState(s => ({ ...s, sidebarWidth: newWidth }));
-      }
+    if (!dragMode || window.innerWidth < 768 || !mainLayoutRef.current) return;
+
+    const rect = mainLayoutRef.current.getBoundingClientRect();
+    const nextSidebarWidth = clamp(((e.clientX - rect.left) / rect.width) * 100, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH);
+    const nextRightTopHeight = clamp(((e.clientY - rect.top) / rect.height) * 100, MIN_RIGHT_TOP, MAX_RIGHT_TOP);
+
+    if (dragMode === 'left') {
+      setState(s => ({ ...s, sidebarWidth: nextSidebarWidth }));
+      return;
     }
-  }, [isResizing]);
+
+    if (dragMode === 'right') {
+      setState(s => ({ ...s, rightTopHeight: nextRightTopHeight }));
+      return;
+    }
+
+    setState(s => ({
+      ...s,
+      sidebarWidth: nextSidebarWidth,
+      rightTopHeight: nextRightTopHeight
+    }));
+  }, [dragMode]);
 
   useEffect(() => {
     window.addEventListener('mousemove', resize);
@@ -289,7 +325,13 @@ export default function App() {
   const runDiagramGeneration = async (type: DiagramType) => {
     if (!state.currentFile?.analysis) return;
     try {
-      setState(s => ({ ...s, status: AnalysisStatus.GENERATING_IMAGE, error: null }));
+      setState(s => ({
+        ...s,
+        status: AnalysisStatus.GENERATING_IMAGE,
+        error: null,
+        isVisualCollapsed: false,
+        rightTopHeight: s.isVisualCollapsed ? 60 : s.rightTopHeight
+      }));
       const url = await generateArchitectureDiagram(state.currentFile.content, state.currentFile.analysis.summary, type, state.settings);
       
       // Update file with diagram
@@ -503,7 +545,7 @@ export default function App() {
       </header>
 
       {/* Main Content Grid */}
-      <main className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
+      <main ref={mainLayoutRef} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
         
         {/* Left Section (Explorer + Code) */}
         <section 
@@ -558,10 +600,10 @@ export default function App() {
           </div>
         </section>
 
-        {/* Resizable Handle (Desktop Only) */}
+        {/* Left/Right Resizable Handle (Desktop Only) */}
         <div
           className="hidden md:flex w-1 bg-gray-200 dark:bg-gray-800 hover:bg-rust dark:hover:bg-rust cursor-col-resize items-center justify-center group transition-colors z-10"
-          onMouseDown={startResizing}
+          onMouseDown={startLeftResizing}
         >
           <GripVertical className="w-3 h-3 text-gray-400 group-hover:text-white" />
         </div>
@@ -573,7 +615,16 @@ export default function App() {
         >
           
           {/* Analysis (Top Right) */}
-          <div className={`flex-1 flex flex-col border-b border-gray-200 dark:border-gray-800 min-h-0 ${state.activePanel === 'visual' ? 'hidden md:flex' : 'flex'}`}>
+          <div
+            className={`flex flex-col min-h-0 border-b border-gray-200 dark:border-gray-800 ${state.activePanel === 'visual' ? 'hidden md:flex' : 'flex'}`}
+            style={{
+              height: window.innerWidth >= 768
+                ? (state.isVisualCollapsed
+                  ? `calc(100% - ${VISUAL_COLLAPSED_HEIGHT}px)`
+                  : `${state.rightTopHeight}%`)
+                : undefined
+            }}
+          >
              <div className="bg-white dark:bg-[#1E1F22] border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Static Analysis</span>
@@ -597,6 +648,19 @@ export default function App() {
                     <History className="w-4 h-4" />
                     {analyzedFiles.length > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-rust rounded-full" />}
                   </button>
+                  <button
+                    onClick={() =>
+                      setState(s => ({
+                        ...s,
+                        isVisualCollapsed: !s.isVisualCollapsed,
+                        rightTopHeight: s.isVisualCollapsed ? 60 : s.rightTopHeight
+                      }))
+                    }
+                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-500"
+                    title={state.isVisualCollapsed ? 'Expand visual panel' : 'Collapse visual panel'}
+                  >
+                    {state.isVisualCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
                 </div>
              </div>
              <AnalysisPanel 
@@ -608,17 +672,33 @@ export default function App() {
              />
           </div>
 
+          {/* Analysis/Visual Resizable Handle (Desktop + Expanded Visual) */}
+          {!state.isVisualCollapsed && (
+            <div
+              className="hidden md:flex h-1 bg-gray-200 dark:bg-gray-800 hover:bg-rust dark:hover:bg-rust cursor-row-resize items-center justify-center transition-colors z-10"
+              onMouseDown={startRightResizing}
+            />
+          )}
+
           {/* Visual (Bottom Right) */}
-          <div className={`flex-1 flex flex-col min-h-0 ${state.activePanel === 'analysis' ? 'hidden md:flex' : 'flex'}`}>
-             <div className="bg-white dark:bg-[#1E1F22] border-b border-gray-200 dark:border-gray-800 px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider shrink-0">
-               Visual Architecture
-             </div>
+          <div
+            className={`flex flex-col min-h-0 overflow-hidden ${state.activePanel === 'analysis' ? 'hidden md:flex' : 'flex'}`}
+            style={{
+              height: window.innerWidth >= 768
+                ? (state.isVisualCollapsed
+                  ? `${VISUAL_COLLAPSED_HEIGHT}px`
+                  : `${100 - state.rightTopHeight}%`)
+                : undefined
+            }}
+          >
              <VisualPanel 
                 diagramUrl={state.currentFile?.diagramUrl || null} 
                 analysis={state.currentFile?.analysis || null}
                 isGenerating={state.status === AnalysisStatus.GENERATING_IMAGE}
                 onGenerate={runDiagramGeneration}
                 error={state.error}
+                isCollapsed={state.isVisualCollapsed}
+                onExpand={() => setState(s => ({ ...s, isVisualCollapsed: false, rightTopHeight: 60 }))}
              />
           </div>
 
@@ -664,6 +744,23 @@ export default function App() {
           )}
 
         </section>
+
+        {/* Center Knob for 2D tri-pane resizing */}
+        <button
+          type="button"
+          onMouseDown={startCenterResizing}
+          className={`hidden md:flex absolute z-20 h-5 w-5 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-900 items-center justify-center shadow-md hover:border-rust hover:text-rust cursor-move transition-colors ${
+            state.isVisualCollapsed ? 'opacity-80' : ''
+          }`}
+          style={{
+            left: `${state.sidebarWidth}%`,
+            top: state.isVisualCollapsed ? `calc(100% - ${VISUAL_COLLAPSED_HEIGHT}px)` : `${state.rightTopHeight}%`,
+            transform: 'translate(-50%, -50%)'
+          }}
+          title="Drag to resize all panes"
+        >
+          <GripVertical className="w-3 h-3 rotate-90" />
+        </button>
 
       </main>
 

@@ -8,14 +8,61 @@ interface VisualPanelProps {
   isGenerating: boolean;
   error?: string | null;
   onGenerate: (type: DiagramType) => void;
+  isCollapsed?: boolean;
+  onExpand?: () => void;
 }
 
-export const VisualPanel: React.FC<VisualPanelProps> = ({ diagramUrl, analysis, isGenerating, error, onGenerate }) => {
+export const VisualPanel: React.FC<VisualPanelProps> = ({
+  diagramUrl,
+  analysis,
+  isGenerating,
+  error,
+  onGenerate,
+  isCollapsed = false,
+  onExpand
+}) => {
   const [activeType, setActiveType] = useState<DiagramType>(DiagramType.FLOWCHART);
 
   const handleGenerate = () => {
     onGenerate(activeType);
   };
+
+  const isQuotaError = error && (error.includes('quota') || error.includes('429') || error.includes('RESOURCE_EXHAUSTED') || error.includes('quota exceeded'));
+
+  if (isCollapsed) {
+    return (
+      <div className="h-full flex items-center justify-between px-3 bg-white dark:bg-[#1E1F22] border-t border-gray-200 dark:border-gray-800">
+        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {Object.values(DiagramType).map((type) => (
+            <button
+              key={type}
+              onClick={() => setActiveType(type)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-all ${
+                activeType === type
+                  ? 'bg-white dark:bg-zinc-700 shadow text-rust dark:text-rust-light'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {type.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => {
+            onExpand?.();
+            handleGenerate();
+          }}
+          disabled={isGenerating || !analysis}
+          className="flex items-center gap-2 px-3 py-1.5 bg-rust hover:bg-rust-dark text-white rounded text-xs font-medium transition-colors disabled:opacity-50"
+          title={!analysis ? 'Run analysis first to generate a diagram' : 'Generate diagram'}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+          {diagramUrl ? 'Regenerate' : 'Generate'}
+        </button>
+      </div>
+    );
+  }
 
   if (!analysis) {
     return (
@@ -25,8 +72,6 @@ export const VisualPanel: React.FC<VisualPanelProps> = ({ diagramUrl, analysis, 
       </div>
     );
   }
-
-  const isQuotaError = error && (error.includes('quota') || error.includes('429') || error.includes('RESOURCE_EXHAUSTED') || error.includes('quota exceeded'));
 
   return (
     <div className="h-full flex flex-col bg-gray-100 dark:bg-[#121212]">
