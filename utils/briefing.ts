@@ -1,5 +1,20 @@
 import { AnalysisResult, IssueSeverity, WalkthroughBlock } from '../types';
 
+// ── Mermaid sanitizer (for rendering) ───────────────────────────────────────
+
+/**
+ * Mermaid treats parentheses in node labels as shape syntax (e.g. stadium).
+ * Labels that contain ( ) must be double-quoted: ["Label (detail)"].
+ * This fixes AI-generated diagrams that use [Label (detail)] so they render.
+ */
+export function sanitizeMermaidForRendering(code: string): string {
+  // Only single-bracket node labels: [text] where text contains ( or ). Avoid [[...]].
+  return code.replace(/\[([^\]]*?[(),][^\]]*?)\](?!])/g, (_, label: string) => {
+    const escaped = label.replace(/"/g, '\\"');
+    return `["${escaped}"]`;
+  });
+}
+
 // ── Security Score ──────────────────────────────────────────────────────────
 
 export interface SecurityScore {

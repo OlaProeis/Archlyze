@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import {
   parseSlides, renderSlideHtml, downloadBriefingMarkdown, exportToPptx, escapeHtml,
+  sanitizeMermaidForRendering,
 } from '../utils/briefing';
 
 // Mermaid is initialized once per session to avoid re-init conflicts
@@ -78,8 +79,9 @@ export const BriefingPanel: React.FC<BriefingPanelProps> = ({
       for (let i = 0; i < containers.length; i++) {
         if (cancelled) return;
         const el = containers[i] as HTMLElement;
-        const code = el.getAttribute('data-mermaid');
+        let code = el.getAttribute('data-mermaid');
         if (!code) continue;
+        code = sanitizeMermaidForRendering(code);
 
         if (mermaid) {
           try {

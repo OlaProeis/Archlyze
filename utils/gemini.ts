@@ -430,7 +430,8 @@ Requirements:
 3. Label nodes with plain English descriptions, not raw function names.
 4. Group related components using subgraph blocks if there are more than 6 components.
 5. Keep it clean and readable — max 15-20 nodes.
-6. Return ONLY valid Mermaid syntax. No markdown fences, no explanation text.`;
+6. For ANY node label that contains parentheses, commas, or other special characters, use double-quoted form: ["Label text here"] not [Label text here]. Example: use ["PowerPoint File Finder (CAML)"] not [PowerPoint File Finder (CAML)]. This is required for valid Mermaid parsing.
+7. Return ONLY valid Mermaid syntax. No markdown fences, no explanation text.`;
 
   const response = await withTimeout<GenerateContentResponse>(
     ai.models.generateContent({
