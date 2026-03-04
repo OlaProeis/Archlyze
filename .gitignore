@@ -10,6 +10,13 @@ coverage
 build
 dist
 
+# Vite / TypeScript
+.vite
+*.tsbuildinfo
+
+# Archive (historical docs)
+archive/
+
 # Misc
 .DS_Store
 .env
@@ -18,6 +25,10 @@ dist
 .env.development.local
 .env.test.local
 .env.production.local
+.cursor/
+.ferrite
+.taskmaster
+
 
 # Editor / OS
 Untitled
@@ -27,3 +38,22 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+logs
+*.log
+yarn-error.log*
+dev-debug.log
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 

@@ -7,7 +7,7 @@ Designed for multiple languages (Rust, Python, JavaScript/TypeScript, Go, Java, 
 
 **Live demo:** [https://archlyze.vercel.app/](https://archlyze.vercel.app/)
 
-![Archlyze](assets/archlyze.png)
+![Archlyze](assets/screenshot1.png)
 
 ## 🚀 Key Features
 
@@ -58,7 +58,7 @@ Designed for multiple languages (Rust, Python, JavaScript/TypeScript, Go, Java, 
     *   **Editable**: Toggle edit mode to tweak the Markdown source before exporting.
     *   Runs entirely on-demand — does not affect the standard analysis pipeline.
 
-![Key Features](assets/archlyze-features.png)
+![Key Features](assets/screenshot2.png)
 
 ## 🛠️ Getting Started
 
@@ -89,7 +89,7 @@ You need a **Google Gemini API Key** (free tier works for analysis).
     ```
 
 4.  **Open in Browser**:
-    Navigate to `http://localhost:3000`. Click the **Settings** icon and paste your API Key.
+    Navigate to `http://localhost:3847` (or the port shown in your terminal). Click the **Settings** icon and paste your API Key.
 
 ### Optional: Environment Variable
 
@@ -106,8 +106,6 @@ GEMINI_API_KEY=your_key_here
 *   Diagram image generation uses `gemini-2.5-flash-image` (fixed) and has limited free-tier quota. If you hit the limit, wait a few minutes or upgrade your API plan.
 *   Gemini 3.x models require a paid API tier.
 
-![Analysis Workflow](assets/archlyze-analysis-workflow.png)
-
 **Analysis Timeouts**:
 *   Small files (<100 lines): 60 second timeout.
 *   Medium files (<500 lines): 120 second timeout.
@@ -120,8 +118,6 @@ When importing large folders (e.g., an entire project root), your browser may di
 *   It is safe to proceed — files are processed in-memory and sent directly to the Gemini API; they are not stored on any intermediate server.
 
 ## 🏗️ Architecture
-
-![Architecture](assets/archlyze-architecture.png)
 
 -   **Frontend**: React 18, TypeScript, Tailwind CSS (CDN).
 -   **AI Engine**: `@google/genai` SDK communicating directly with Gemini models.
@@ -140,9 +136,14 @@ When importing large folders (e.g., an entire project root), your browser may di
 
 Your API Key is stored **locally in your browser's LocalStorage**. It is never sent to our servers. It is transmitted directly from your browser to Google's API endpoints.
 
+## 📚 Documentation
+
+- [docs/](docs/) — Feature and architecture documentation
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Technical guide for contributors
+
 ## 🤝 Contributing
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for technical details on how to extend the project.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for technical details on how to extend the project.
 
 ## 📄 License
 
