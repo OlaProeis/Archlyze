@@ -47,6 +47,16 @@ Designed for multiple languages (Rust, Python, JavaScript/TypeScript, Go, Java, 
 *   **Resizable Panels**: Drag-to-resize split between code and analysis panels (desktop).
 *   **Mobile Responsive**: Dedicated mobile tab navigation (Code / Analysis / Visual).
 *   **Export**: Download full analysis reports as Markdown.
+*   **Executive Briefing** (NEW):
+    *   **"Generate Briefing" button** in the analysis panel — transforms code analysis into a management-ready presentation.
+    *   **Executive Translation**: Gemini rewrites the analysis in plain, jargon-free language for non-technical stakeholders.
+    *   **Code Walkthrough**: Side-by-side view with full source code on the left and plain English explanations on the right, section by section.
+    *   **Architecture Diagram**: Auto-generated Mermaid.js flowchart rendered live in the presentation.
+    *   **Security Scorecard**: Visual risk heatmap computed from detected issues (score 0–100, per-component health table).
+    *   **Briefing Language**: Configurable in Settings — generate briefings in English, Norwegian, Japanese, or any language.
+    *   **Export**: Download as Markdown, PowerPoint (.pptx via pptxgenjs), or PDF (via browser print).
+    *   **Editable**: Toggle edit mode to tweak the Markdown source before exporting.
+    *   Runs entirely on-demand — does not affect the standard analysis pipeline.
 
 ![Key Features](assets/archlyze-features.png)
 
@@ -118,6 +128,8 @@ When importing large folders (e.g., an entire project root), your browser may di
     -   Analysis: User-selected model (default `gemini-2.5-flash`) with structured JSON `responseSchema`.
     -   Diagram generation: `gemini-2.5-flash-image` (hardcoded).
     -   Fix / Test generation: User-selected model with plain text output.
+    -   Executive Briefing: User-selected model — generates executive summary, code walkthrough, and Mermaid diagram text.
+-   **Briefing Engine**: On-demand presentation generation with Mermaid.js (diagram rendering) and pptxgenjs (PowerPoint export). Both are lazy-loaded / code-split.
 -   **Build Tool**: Vite 6 with React plugin. Dev server on port 3000.
 -   **State Management**: React local state with a central `AppState` object (no Redux required).
 -   **Persistence**: LocalStorage for user settings (API key, model, max lines) and theme preference.

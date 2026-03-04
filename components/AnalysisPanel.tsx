@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AnalysisResult, CodeComponent, IssueSeverity, CodeIssue, Dependency } from '../types';
-import { AlertTriangle, Info, XCircle, Box, Code, Layers, FileDown, Package, Wand2, TestTube, Activity, Key, Plug } from 'lucide-react';
+import { AlertTriangle, Info, XCircle, Box, Code, Layers, FileDown, Package, Wand2, TestTube, Activity, Key, Plug, Presentation } from 'lucide-react';
 import { downloadMarkdownReport } from '../utils/export';
 
 interface AnalysisPanelProps {
@@ -10,6 +10,8 @@ interface AnalysisPanelProps {
   selectedComponentId: string | null;
   onFixIssue: (issue: CodeIssue) => void;
   onGenerateTests: (component: CodeComponent) => void;
+  onBriefing?: () => void;
+  hasBriefing?: boolean;
 }
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ 
@@ -17,7 +19,9 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   onComponentSelect, 
   selectedComponentId,
   onFixIssue,
-  onGenerateTests
+  onGenerateTests,
+  onBriefing,
+  hasBriefing,
 }) => {
   if (!result) return <div className="p-6 text-gray-500 text-center italic">Run analysis to see details here.</div>;
 
@@ -32,6 +36,16 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           <div className="mr-auto text-xs font-mono text-gray-400">
             Detected: <span className="font-bold text-rust">{result.language}</span>
           </div>
+          {onBriefing && (
+            <button 
+              onClick={onBriefing}
+              className="text-xs flex items-center gap-1.5 bg-rust/10 hover:bg-rust hover:text-white text-rust dark:text-rust-light px-2 py-1 rounded transition-colors font-medium"
+              title={hasBriefing ? "View executive briefing" : "Generate executive briefing"}
+            >
+              <Presentation className="w-4 h-4" />
+              {hasBriefing ? 'View Briefing' : 'Generate Briefing'}
+            </button>
+          )}
           <button 
             onClick={() => downloadMarkdownReport(result)}
             className="text-xs flex items-center gap-1.5 text-gray-500 hover:text-rust dark:text-gray-400 dark:hover:text-rust-light transition-colors"

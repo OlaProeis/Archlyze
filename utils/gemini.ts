@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { AnalysisResult, DiagramType, AppSettings, CodeIssue, CodeComponent, ProjectFile } from "../types";
+import { AnalysisResult, DiagramType, AppSettings, CodeIssue, CodeComponent, WalkthroughBlock } from "../types";
 
 const getEnvApiKey = (): string | undefined => {
   try {
@@ -325,4 +325,216 @@ export async function generateUnitTests(code: string, component: CodeComponent, 
 
   let text = response.text || "// No tests generated";
   return extractJson(text);
+}
+
+// ── Executive Briefing (separate from analysis pipeline) ────────────────────
+
+export async function generateExecutiveBriefing(
+  code: string,
+  analysis: AnalysisResult,
+  language: string,
+  settings: AppSettings
+): Promise<string> {
+  const ai = getAiClient(settings.apiKey);
+
+  const issueCount =
+    (analysis.overallIssues?.length || 0) +
+    analysis.components.reduce((sum, c) => sum + (c.issues?.length || 0), 0);
+
+  const prompt = `You are a technical writer creating an executive briefing for non-technical stakeholders.
+
+Write the entire briefing in **${language || 'English'}**.
+
+Context:
+- Language detected: ${analysis.language}
+- Components found: ${analysis.components.length}
+- Total issues found: ${issueCount}
+- Dependencies: ${analysis.dependencies.map(d => d.name).join(', ') || 'None'}
+
+Analysis summary: ${analysis.summary}
+
+Full source code:
+${code.substring(0, 8000)}
+
+Produce a Markdown document with these exact sections (use ## headings):
+
+## Executive Summary
+2-3 sentences: what the code does, its purpose, overall quality.
+
+## Purpose & Business Context
+What business problem does this code solve? Who uses it?
+
+## How It Works
+Section-by-section plain English narrative. Translate technical operations into business language. Do NOT include raw code. Reference line numbers only for risk findings.
+
+## Risk Assessment
+Based on these detected issues, explain each risk in business terms:
+${JSON.stringify(analysis.overallIssues.slice(0, 10), null, 2)}
+
+## Dependencies & Integrations
+For each external library, explain what it does in plain language:
+${analysis.dependencies.map(d => `- ${d.name}: ${d.description}`).join('\n')}
+
+## Recommendations
+Prioritized action items for the team.
+
+Rules:
+- Use clear, jargon-free language throughout.
+- Write in ${language || 'English'}.
+- Do NOT wrap in code fences. Return raw Markdown.
+- Do NOT include a top-level title (# heading) — it will be added by the template.`;
+
+  const response = await withTimeout<GenerateContentResponse>(
+    ai.models.generateContent({
+      model: settings.model || 'gemini-2.5-flash',
+      contents: prompt,
+    }),
+    90000,
+    'Briefing generation timed out after 90s.'
+  );
+
+  const text = response.text || '';
+  if (!text.trim()) throw new Error('Received empty briefing from AI.');
+  return text.trim();
+}
+
+export async function generateMermaidDiagram(
+  code: string,
+  analysis: AnalysisResult,
+  settings: AppSettings
+): Promise<string> {
+  const ai = getAiClient(settings.apiKey);
+
+  const componentList = analysis.components
+    .map(c => `${c.type} "${c.name}" (lines ${c.startLine}-${c.endLine})`)
+    .join('\n');
+
+  const depList = analysis.components
+    .filter(c => c.dependencies.length > 0)
+    .map(c => `${c.name} -> ${c.dependencies.join(', ')}`)
+    .join('\n');
+
+  const prompt = `Generate a Mermaid.js flowchart diagram representing the architecture of this code.
+
+Components:
+${componentList}
+
+Dependency relationships:
+${depList}
+
+Code summary: ${analysis.summary}
+
+Requirements:
+1. Use "graph TD" (top-down) syntax.
+2. Show the main components as nodes and their relationships as arrows.
+3. Label nodes with plain English descriptions, not raw function names.
+4. Group related components using subgraph blocks if there are more than 6 components.
+5. Keep it clean and readable — max 15-20 nodes.
+6. Return ONLY valid Mermaid syntax. No markdown fences, no explanation text.`;
+
+  const response = await withTimeout<GenerateContentResponse>(
+    ai.models.generateContent({
+      model: settings.model || 'gemini-2.5-flash',
+      contents: prompt,
+    }),
+    45000,
+    'Mermaid diagram generation timed out.'
+  );
+
+  let text = (response.text || '').trim();
+  if (!text) throw new Error('Received empty Mermaid diagram from AI.');
+  text = text.replace(/^```(?:mermaid)?\s*/i, '').replace(/\s*```\s*$/, '');
+  return text.trim();
+}
+
+// ── Code Walkthrough (line-by-line plain English) ───────────────────────────
+
+export async function generateCodeWalkthrough(
+  code: string,
+  analysis: AnalysisResult,
+  language: string,
+  settings: AppSettings
+): Promise<WalkthroughBlock[]> {
+  const ai = getAiClient(settings.apiKey);
+  const modelName = settings.model || 'gemini-2.5-flash';
+
+  const maxLines = settings.maxLines || 10000;
+  const codeLines = code.split('\n');
+  const effectiveCode = codeLines.length > maxLines
+    ? codeLines.slice(0, maxLines).join('\n')
+    : code;
+
+  const prompt = `You are a technical writer explaining code to non-technical executives.
+
+Write all explanations in **${language || 'English'}**.
+
+Break the following source code into logical sections (imports, configuration, each major function/class, error handling, main flow, etc.). For each section provide:
+- The exact start and end line numbers
+- A short title (2-5 words)
+- A plain English explanation of what that section does, written for someone with no programming background
+- A risk note if there are any security, performance, or quality concerns in that section (empty string if none)
+
+Rules:
+- Aim for 5-10 sections. Group very small related blocks together.
+- Cover the ENTIRE file from first to last line — no gaps.
+- Explanations should be 1-3 sentences, business-focused.
+- Risk notes should reference specific issues when present.
+- Do NOT include code in your explanations.
+
+Known issues from prior analysis:
+${JSON.stringify(analysis.overallIssues.slice(0, 15).map(i => ({ line: i.line, severity: i.severity, message: i.message })))}
+
+Source code (${analysis.language}):
+${effectiveCode}`;
+
+  const blockSchema = {
+    type: Type.OBJECT,
+    description: 'A logical section of the source code with its plain English explanation.',
+    properties: {
+      startLine: { type: Type.INTEGER, description: 'First line number of this section (1-based).' },
+      endLine: { type: Type.INTEGER, description: 'Last line number of this section (1-based).' },
+      title: { type: Type.STRING, description: 'Short title for this section (2-5 words).' },
+      explanation: { type: Type.STRING, description: 'Plain English explanation for non-technical readers.' },
+      risk: { type: Type.STRING, description: 'Risk note if any issues exist in this section, or empty string.' },
+    },
+    required: ['startLine', 'endLine', 'title', 'explanation', 'risk'],
+  };
+
+  const responseSchema = {
+    type: Type.ARRAY,
+    description: 'Ordered list of code sections covering the entire file.',
+    items: blockSchema,
+  };
+
+  const response = await withTimeout<GenerateContentResponse>(
+    ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema,
+      },
+    }),
+    90000,
+    'Code walkthrough generation timed out after 90s.'
+  );
+
+  let text = '';
+  try {
+    text = response.text || '';
+  } catch {
+    const parts = response.candidates?.[0]?.content?.parts || [];
+    text = parts.map((p: any) => p.text || '').join('');
+  }
+
+  if (!text.trim()) throw new Error('Received empty walkthrough from AI.');
+
+  const cleaned = extractJson(text);
+  const blocks = JSON.parse(cleaned) as WalkthroughBlock[];
+
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    throw new Error('AI returned no walkthrough blocks.');
+  }
+
+  return blocks;
 }

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppSettings } from '../types';
-import { X, Save, Key, Cpu, FileText, ExternalLink, Zap, Brain, Sparkles, ChevronDown } from 'lucide-react';
+import { X, Save, Key, Cpu, FileText, ExternalLink, Zap, Brain, Sparkles, ChevronDown, Globe } from 'lucide-react';
 
 // ── Model Registry ──────────────────────────────────────────────────────────
 interface ModelOption {
@@ -23,6 +23,12 @@ const AVAILABLE_MODELS: ModelOption[] = [
   { id: 'gemini-3-pro-preview',         name: 'Gemini 3 Pro',           description: 'Next-gen reasoning. Requires paid API tier.', tier: 'paid' },
 ];
 
+const LANGUAGE_PRESETS = [
+  'English', 'Norwegian', 'Spanish', 'French', 'German', 'Portuguese',
+  'Japanese', 'Korean', 'Chinese', 'Dutch', 'Italian',
+  'Russian', 'Arabic', 'Hindi', 'Swedish', 'Danish', 'Finnish', 'Polish',
+];
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +40,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [localSettings, setLocalSettings] = React.useState<AppSettings>(settings);
   const [useCustomModel, setUseCustomModel] = React.useState(false);
   const [customModelId, setCustomModelId] = React.useState('');
+  const [useCustomLanguage, setUseCustomLanguage] = React.useState(false);
 
   // Sync when opening
   React.useEffect(() => {
@@ -45,6 +52,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
       if (!isKnown && settings.model !== '') {
         setCustomModelId(settings.model);
       }
+      // Check if current language is a known preset or custom
+      const isKnownLang = LANGUAGE_PRESETS.includes(settings.briefingLanguage || 'English');
+      setUseCustomLanguage(!isKnownLang);
     }
   }, [isOpen, settings]);
 
@@ -225,6 +235,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Limit code analysis size. Higher limits allow analyzing larger files but may increase processing time.
+            </p>
+          </div>
+
+          {/* Briefing Language */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+              <Globe className="w-4 h-4" /> Briefing Language
+            </label>
+            <select
+              value={useCustomLanguage ? '__custom__' : (localSettings.briefingLanguage || 'English')}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setUseCustomLanguage(true);
+                  setLocalSettings({ ...localSettings, briefingLanguage: '' });
+                } else {
+                  setUseCustomLanguage(false);
+                  setLocalSettings({ ...localSettings, briefingLanguage: e.target.value });
+                }
+              }}
+              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rust focus:border-transparent outline-none transition-all"
+            >
+              {LANGUAGE_PRESETS.map(lang => (
+                <option key={lang} value={lang}>{lang}</option>
+              ))}
+              <option value="__custom__">Custom…</option>
+            </select>
+            {useCustomLanguage && (
+              <input
+                type="text"
+                value={localSettings.briefingLanguage || ''}
+                onChange={(e) => setLocalSettings({ ...localSettings, briefingLanguage: e.target.value })}
+                placeholder="e.g. Catalan, Tagalog, Swahili…"
+                autoFocus
+                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rust focus:border-transparent outline-none transition-all"
+              />
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The language used for executive briefings and slide content. Does not affect code analysis.
             </p>
           </div>
 

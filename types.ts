@@ -48,10 +48,19 @@ export interface AnalysisResult {
   timestamp?: number; // For history sorting
 }
 
+export interface WalkthroughBlock {
+  startLine: number;
+  endLine: number;
+  title: string;
+  explanation: string;
+  risk: string;
+}
+
 export interface AppSettings {
   apiKey: string;
   model: string;
   maxLines: number;
+  briefingLanguage: string;
 }
 
 export interface ProjectFile {
@@ -62,6 +71,10 @@ export interface ProjectFile {
   // Cache results per file
   analysis?: AnalysisResult | null;
   diagramUrl?: string | null;
+  // Briefing cache (separate from analysis pipeline)
+  briefingMarkdown?: string | null;
+  mermaidDiagram?: string | null;
+  walkthroughBlocks?: WalkthroughBlock[] | null;
 }
 
 export interface AppState {
@@ -86,6 +99,10 @@ export interface AppState {
     code: string;
     type: 'fix' | 'test' | null;
   };
+  // Briefing state (independent of main analysis status)
+  showBriefing: boolean;
+  briefingLoading: boolean;
+  briefingError: string | null;
 }
 
 export enum DiagramType {

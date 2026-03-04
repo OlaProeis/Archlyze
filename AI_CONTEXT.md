@@ -25,29 +25,49 @@
 │                           panel resizing, theme toggle, settings persistence.
 ├── types.ts             → All TypeScript interfaces and enums:
 │                           AnalysisStatus, IssueSeverity, CodeIssue, CodeComponent,
-│                           Dependency, AnalysisResult, AppSettings, ProjectFile, AppState, DiagramType
+│                           Dependency, AnalysisResult, WalkthroughBlock, AppSettings,
+│                           ProjectFile, AppState, DiagramType
 ├── constants.ts         → Example code snippets (Rust CLI, Python Data, JS Express).
 ├── vite.config.ts       → Vite config. Exposes GEMINI_API_KEY env var as process.env.API_KEY.
 │                           Dev server on port 3000, host 0.0.0.0.
 ├── utils/
-│   ├── gemini.ts        → All AI integration logic. Four exported async functions:
+│   ├── gemini.ts        → All AI integration logic. Seven exported async functions:
 │   │                       - analyzeRustCode(): Structured JSON analysis with responseSchema
 │   │                       - generateArchitectureDiagram(): Image generation via gemini-2.5-flash-image
 │   │                       - generateFix(): Text generation for issue fixes
 │   │                       - generateUnitTests(): Text generation for unit tests
+│   │                       - generateExecutiveBriefing(): Plain English briefing (on-demand, separate pipeline)
+│   │                       - generateMermaidDiagram(): Mermaid text diagram for briefing slides
+│   │                       - generateCodeWalkthrough(): Structured JSON walkthrough blocks
 │   │                       Also: getAiClient(), cleanJson(), withTimeout() helpers.
-│   └── export.ts        → downloadMarkdownReport(): Generates and downloads a .md report file.
+│   ├── export.ts        → downloadMarkdownReport(): Generates and downloads a .md report file.
+│   └── briefing.ts      → Executive Briefing utilities (separate from analysis):
+│                           - buildSlideMarkdown(): Assembles briefing + walkthrough + scorecard into slide Markdown
+│                           - computeSecurityScore(): Weighted score from issue severities
+│                           - computeComponentHealth(): Per-component error/warning/info counts
+│                           - parseSlides(): Splits Markdown by --- into individual slides
+│                           - renderSlideHtml(): Converts slide Markdown to styled HTML (includes
+│                             two-column walkthrough layout via :::walkthrough directives)
+│                           - downloadBriefingMarkdown(): Downloads briefing as .md file
+│                           - exportToPptx(): Generates PowerPoint via pptxgenjs (lazy-loaded)
 ├── components/
 │   ├── CodePanel.tsx     → Code viewer with line numbers, component highlighting, issue underlines.
 │   │                       Includes SyntaxHighlight sub-component (keyword-based, multi-language).
 │   │                       Togglable edit mode (textarea).
 │   ├── AnalysisPanel.tsx → Displays analysis results: summary, dependencies, issues, components.
 │   │                       Sub-components: ComponentCard, IssueCard.
-│   │                       Has export report button, fix issue (Wand), generate test (TestTube) actions.
+│   │                       Has export report button, "Generate Briefing" button,
+│   │                       fix issue (Wand), generate test (TestTube) actions.
 │   ├── VisualPanel.tsx   → Diagram type selector (Flowchart/UML/Data Flow), generate/regenerate button,
 │   │                       displays generated image, download link.
-│   ├── SettingsModal.tsx → API key input, model selection (Flash/Pro), max lines slider.
+│   ├── SettingsModal.tsx → API key input, model selection (Flash/Pro), max lines slider,
+│   │                       briefing language selector (15 presets + custom).
 │   │                       Settings persisted to localStorage under 'rustflow_settings'.
+│   ├── BriefingPanel.tsx → Full-screen presentation overlay for Executive Briefing.
+│   │                       Slide-by-slide navigation (keyboard + click), progress bar,
+│   │                       Mermaid rendering (lazy-loaded, single init), edit mode,
+│   │                       export (Markdown / PPTX / PDF). Walkthrough slides use
+│   │                       two-column layout (code left, explanation right).
 │   ├── FolderImportModal.tsx → Folder upload with .gitignore parsing (via `ignore` npm package),
 │   │                       extension filtering, stats (total/ignored/to-import), select all/clear.
 │   ├── FileExplorer.tsx  → Sidebar tree view. Builds tree from flat file list. Collapsible folders.
@@ -66,18 +86,21 @@ All state lives in `App.tsx` as a single `useState<AppState>` object. There is n
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `files` | `ProjectFile[]` | All loaded files. Each has `content`, `analysis`, `diagramUrl`. |
+| `files` | `ProjectFile[]` | All loaded files. Each has `content`, `analysis`, `diagramUrl`, `briefingMarkdown`, `mermaidDiagram`, `walkthroughBlocks`. |
 | `currentFile` | `ProjectFile \| null` | The actively viewed/edited file. |
 | `status` | `AnalysisStatus` enum | Drives loading states: IDLE, ANALYZING, GENERATING_IMAGE, FIXING, GENERATING_TESTS, COMPLETE, ERROR |
 | `activePanel` | `'code' \| 'analysis' \| 'visual'` | Controls mobile tab navigation and panel visibility. |
 | `selectedComponentId` | `string \| null` | Which component is highlighted in both code viewer and analysis panel. |
 | `isDarkMode` | `boolean` | Theme toggle. Persisted to localStorage (`rustflow_theme`). |
 | `isEditing` | `boolean` | Code editor toggle (view vs edit mode). |
-| `settings` | `AppSettings` | API key, model name, maxLines. Persisted to localStorage (`rustflow_settings`). |
+| `settings` | `AppSettings` | API key, model name, maxLines, briefingLanguage. Persisted to localStorage (`rustflow_settings`). |
 | `sidebarWidth` | `number` | Panel split percentage (20-80 range). |
 | `modalContent` | `object` | Controls CodeResultModal (fix/test results). |
 | `showSettings` | `boolean` | Settings modal visibility. |
 | `showHistory` | `boolean` | History sidebar visibility. |
+| `showBriefing` | `boolean` | BriefingPanel overlay visibility. |
+| `briefingLoading` | `boolean` | Briefing generation in progress (independent of `status`). |
+| `briefingError` | `string \| null` | Briefing generation error (independent of `error`). |
 
 ### State Update Pattern
 
@@ -95,6 +118,9 @@ State is updated via `setState(s => ({ ...s, ... }))` spread pattern everywhere.
 | `generateArchitectureDiagram` | `gemini-2.5-flash-image` (hardcoded) | Inline image (base64 data URL) |
 | `generateFix` | User-selected (default `gemini-2.5-flash`) | Plain text |
 | `generateUnitTests` | User-selected (default `gemini-2.5-flash`) | Plain text |
+| `generateExecutiveBriefing` | User-selected (default `gemini-2.5-flash`) | Plain Markdown text |
+| `generateMermaidDiagram` | User-selected (default `gemini-2.5-flash`) | Raw Mermaid syntax text |
+| `generateCodeWalkthrough` | User-selected (default `gemini-2.5-flash`) | Structured JSON via `responseSchema` (WalkthroughBlock[]) |
 
 ### Available Models (configured in SettingsModal.tsx)
 
@@ -108,6 +134,9 @@ State is updated via `setState(s => ({ ...s, ... }))` spread pattern everywhere.
 - Diagram generation: 45 seconds
 - Fix generation: 30 seconds
 - Test generation: 45 seconds
+- Executive briefing: 90 seconds
+- Mermaid diagram (text): 45 seconds
+- Code walkthrough: 90 seconds
 
 Gemini 2.5 models are "thinking" models with an internal reasoning phase before output, requiring longer timeouts than older models.
 
@@ -147,7 +176,7 @@ Priority: `settings.apiKey` (user-provided) > `process.env.API_KEY` (env var fro
 ## Important Conventions & Patterns
 
 1. **File identity**: Files are identified by `path` (string). When updating a file's analysis/diagram, both `currentFile` and the matching entry in `state.files` must be updated.
-2. **Analysis caching**: Each `ProjectFile` caches its `analysis` and `diagramUrl`. Switching files restores cached results instantly.
+2. **Analysis caching**: Each `ProjectFile` caches its `analysis`, `diagramUrl`, `briefingMarkdown`, `mermaidDiagram`, and `walkthroughBlocks`. Switching files restores cached results instantly.
 3. **Component IDs**: AI-generated component IDs (e.g., `comp-0`). If AI omits IDs, `gemini.ts` assigns them as `comp-${index}`.
 4. **Syntax highlighting**: Custom regex-based keyword matching (not AST-based). Covers Rust, JS/TS, Python, Vue, and common keywords. Located in `CodePanel.tsx` `SyntaxHighlight` component.
 5. **Folder upload**: Uses `webkitdirectory` attribute (non-standard but widely supported). Files go through `FolderImportModal` for filtering before being loaded.
@@ -179,6 +208,12 @@ Priority: `settings.apiKey` (user-provided) > `process.env.API_KEY` (env var fro
 3. Add UI controls in `SettingsModal.tsx`.
 4. Settings auto-persist via `updateSettings()` in `App.tsx`.
 
+### Adding a new briefing slide type
+1. Modify the `buildSlideMarkdown()` function in `utils/briefing.ts` to add the new slide content.
+2. If custom HTML layout is needed, use `:::directive` syntax and add a handler in `renderSlideHtml()`.
+3. For PPTX export, update `parseSlideForPptx()` to handle the new directive format.
+4. Briefing generation is independent from analysis — it uses `handleBriefing()` in `App.tsx` which calls three Gemini functions in parallel via `Promise.allSettled`.
+
 ### Adding a new component type for analysis
 1. Add the type string to the `CodeComponent.type` union in `types.ts`.
 2. Add the same string to the `enum` array in the `responseSchema` in `gemini.ts`.
@@ -193,6 +228,8 @@ Priority: `settings.apiKey` (user-provided) > `process.env.API_KEY` (env var fro
 |---------|---------|---------|
 | react | 18.2.0 | UI framework |
 | react-dom | 18.2.0 | DOM rendering |
+| mermaid | latest | Mermaid diagram rendering in briefing slides (lazy-loaded) |
+| pptxgenjs | latest | PowerPoint export for briefing (lazy-loaded) |
 | lucide-react | 0.344.0 | Icon library |
 | @google/genai | latest | Google Gemini AI SDK (note: `latest` is risky, should be pinned) |
 | ignore | 5.3.1 | .gitignore rule parsing |

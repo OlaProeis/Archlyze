@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Upload, Play, Moon, Sun, Share2, FileCode, AlertTriangle, Edit2, Check, Settings, GripVertical, FolderOpen, PanelLeft, History, X, Clock, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { AppState, AnalysisStatus, DiagramType, AppSettings, CodeIssue, CodeComponent, ProjectFile } from './types';
 import { EXAMPLE_RUST_CLI, EXAMPLE_PYTHON_DATA, EXAMPLE_JS_EXPRESS } from './constants';
-import { analyzeRustCode, generateArchitectureDiagram, generateFix, generateUnitTests } from './utils/gemini';
+import { analyzeRustCode, generateArchitectureDiagram, generateFix, generateUnitTests, generateExecutiveBriefing, generateMermaidDiagram, generateCodeWalkthrough } from './utils/gemini';
+import { buildSlideMarkdown } from './utils/briefing';
 import { CodePanel } from './components/CodePanel';
 import { AnalysisPanel } from './components/AnalysisPanel';
 import { VisualPanel } from './components/VisualPanel';
@@ -12,6 +13,7 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { CodeResultModal } from './components/CodeResultModal';
 import { FileExplorer } from './components/FileExplorer';
 import { FolderImportModal } from './components/FolderImportModal';
+import { BriefingPanel } from './components/BriefingPanel';
 
 const INITIAL_CODE = `// Select an example, upload a file, or open a folder to begin
 fn main() {
@@ -22,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   apiKey: '',
   model: 'gemini-2.5-flash',
   maxLines: 10000,
+  briefingLanguage: 'English',
 };
 
 const MIN_LEFT_WIDTH = 20;
@@ -61,7 +64,10 @@ export default function App() {
       title: '',
       code: '',
       type: null
-    }
+    },
+    showBriefing: false,
+    briefingLoading: false,
+    briefingError: null,
   });
 
   // Ensure we have a default file if empty
@@ -412,6 +418,162 @@ export default function App() {
     });
   };
 
+  // ── Executive Briefing (independent from main analysis) ─────────────────
+
+  const handleBriefing = async () => {
+    if (!state.currentFile?.analysis) return;
+
+    // If briefing already cached, just open it
+    if (state.currentFile.briefingMarkdown) {
+      setState(s => ({ ...s, showBriefing: true }));
+      return;
+    }
+
+    // Generate fresh
+    setState(s => ({ ...s, showBriefing: true, briefingLoading: true, briefingError: null }));
+
+    try {
+      const [briefing, mermaidDiagram, walkthrough] = await Promise.allSettled([
+        generateExecutiveBriefing(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings.briefingLanguage || 'English',
+          state.settings
+        ),
+        generateMermaidDiagram(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings
+        ),
+        generateCodeWalkthrough(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings.briefingLanguage || 'English',
+          state.settings
+        ),
+      ]);
+
+      const briefingText = briefing.status === 'fulfilled' ? briefing.value : '';
+      const mermaidText = mermaidDiagram.status === 'fulfilled' ? mermaidDiagram.value : '';
+      const walkthroughBlocks = walkthrough.status === 'fulfilled' ? walkthrough.value : [];
+
+      if (!briefingText) {
+        throw new Error(briefing.status === 'rejected' ? (briefing.reason?.message || 'Briefing generation failed') : 'Empty briefing returned');
+      }
+
+      const slideMarkdown = buildSlideMarkdown(
+        briefingText,
+        mermaidText,
+        state.currentFile.analysis!,
+        state.currentFile.name,
+        state.currentFile.content,
+        walkthroughBlocks,
+      );
+
+      const updatedFile = {
+        ...state.currentFile,
+        briefingMarkdown: slideMarkdown,
+        mermaidDiagram: mermaidText,
+        walkthroughBlocks,
+      };
+
+      setState(s => ({
+        ...s,
+        briefingLoading: false,
+        currentFile: updatedFile,
+        files: s.files.map(f => f.path === updatedFile.path ? updatedFile : f),
+      }));
+    } catch (e: any) {
+      setState(s => ({
+        ...s,
+        briefingLoading: false,
+        briefingError: e.message || 'Failed to generate briefing',
+      }));
+    }
+  };
+
+  const handleRegenerateBriefing = async () => {
+    if (!state.currentFile?.analysis) return;
+
+    const clearedFile = { ...state.currentFile, briefingMarkdown: null, mermaidDiagram: null, walkthroughBlocks: null };
+    setState(s => ({
+      ...s,
+      currentFile: clearedFile,
+      files: s.files.map(f => f.path === clearedFile.path ? clearedFile : f),
+      briefingLoading: true,
+      briefingError: null,
+    }));
+
+    try {
+      const [briefing, mermaidDiagram, walkthrough] = await Promise.allSettled([
+        generateExecutiveBriefing(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings.briefingLanguage || 'English',
+          state.settings
+        ),
+        generateMermaidDiagram(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings
+        ),
+        generateCodeWalkthrough(
+          state.currentFile.content,
+          state.currentFile.analysis,
+          state.settings.briefingLanguage || 'English',
+          state.settings
+        ),
+      ]);
+
+      const briefingText = briefing.status === 'fulfilled' ? briefing.value : '';
+      const mermaidText = mermaidDiagram.status === 'fulfilled' ? mermaidDiagram.value : '';
+      const walkthroughBlocks = walkthrough.status === 'fulfilled' ? walkthrough.value : [];
+
+      if (!briefingText) {
+        throw new Error(briefing.status === 'rejected' ? (briefing.reason?.message || 'Briefing generation failed') : 'Empty briefing returned');
+      }
+
+      const slideMarkdown = buildSlideMarkdown(
+        briefingText,
+        mermaidText,
+        state.currentFile.analysis!,
+        state.currentFile.name,
+        state.currentFile.content,
+        walkthroughBlocks,
+      );
+
+      const updatedFile = {
+        ...state.currentFile,
+        briefingMarkdown: slideMarkdown,
+        mermaidDiagram: mermaidText,
+        walkthroughBlocks,
+      };
+
+      setState(s => ({
+        ...s,
+        briefingLoading: false,
+        currentFile: updatedFile,
+        files: s.files.map(f => f.path === updatedFile.path ? updatedFile : f),
+      }));
+    } catch (e: any) {
+      setState(s => ({
+        ...s,
+        briefingLoading: false,
+        briefingError: e.message || 'Failed to regenerate briefing',
+      }));
+    }
+  };
+
+  const handleUpdateBriefingMarkdown = (md: string) => {
+    if (!state.currentFile) return;
+    const updatedFile = { ...state.currentFile, briefingMarkdown: md };
+    setState(s => ({
+      ...s,
+      currentFile: updatedFile,
+      files: s.files.map(f => f.path === updatedFile.path ? updatedFile : f),
+    }));
+  };
+
   const updateCurrentCode = (newCode: string) => {
     if (!state.currentFile) return;
     const updatedFile = { ...state.currentFile, content: newCode };
@@ -457,6 +619,17 @@ export default function App() {
         onClose={() => setState(s => ({ ...s, modalContent: { ...s.modalContent, isOpen: false } }))}
         title={state.modalContent.title}
         code={state.modalContent.code}
+      />
+
+      <BriefingPanel
+        isOpen={state.showBriefing}
+        onClose={() => setState(s => ({ ...s, showBriefing: false }))}
+        markdown={state.currentFile?.briefingMarkdown || ''}
+        isLoading={state.briefingLoading}
+        error={state.briefingError}
+        filename={state.currentFile?.name || 'code'}
+        onUpdateMarkdown={handleUpdateBriefingMarkdown}
+        onRegenerate={handleRegenerateBriefing}
       />
 
       {/* Header */}
@@ -669,6 +842,8 @@ export default function App() {
                 onComponentSelect={(id) => setState(s => ({ ...s, selectedComponentId: id }))}
                 onFixIssue={handleFixIssue}
                 onGenerateTests={handleGenerateTests}
+                onBriefing={handleBriefing}
+                hasBriefing={!!state.currentFile?.briefingMarkdown}
              />
           </div>
 

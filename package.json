@@ -1,7 +1,7 @@
 {
   "name": "archlyze",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,8 @@
     "@google/genai": "latest",
     "ignore": "5.3.1",
     "lucide-react": "0.344.0",
+    "mermaid": "^11.12.3",
+    "pptxgenjs": "^4.0.1",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
